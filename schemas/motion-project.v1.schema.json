@@ -1,0 +1,115 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:motionstudio:project:v1",
+  "title": "MotionStudio Project v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schemaVersion", "projectId", "name", "composition", "layers", "tracks", "assets"],
+  "properties": {
+    "schemaVersion": { "const": 1 },
+    "projectId": { "type": "string", "minLength": 1 },
+    "name": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "composition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["width", "height", "fps", "durationFrames"],
+      "properties": {
+        "width": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "height": { "type": "integer", "minimum": 1, "maximum": 16384 },
+        "fps": { "enum": [24, 30, 60] },
+        "durationFrames": { "type": "integer", "minimum": 1, "maximum": 216000 }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "kind", "name", "visible", "locked", "zIndex", "geometry", "transform", "opacity", "fill"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "kind": { "enum": ["rectangle", "ellipse", "text", "group"] },
+          "name": { "type": "string", "minLength": 1 },
+          "parentId": { "type": ["string", "null"] },
+          "textContent": { "type": ["string", "null"] },
+          "fontSize": { "type": ["number", "null"] },
+          "visible": { "type": "boolean" },
+          "locked": { "type": "boolean" },
+          "zIndex": { "type": "integer", "minimum": 0 },
+          "geometry": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["width", "height"],
+            "properties": {
+              "width": { "type": "number", "exclusiveMinimum": 0 },
+              "height": { "type": "number", "exclusiveMinimum": 0 }
+            }
+          },
+          "transform": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["x", "y", "rotation", "scaleX", "scaleY"],
+            "properties": {
+              "x": { "type": "number" },
+              "y": { "type": "number" },
+              "rotation": { "type": "number" },
+              "scaleX": { "type": "number" },
+              "scaleY": { "type": "number" }
+            }
+          },
+          "opacity": { "type": "number", "minimum": 0, "maximum": 1 },
+          "fill": { "type": "string", "pattern": "^#[0-9A-Fa-f]{6}$" }
+        }
+      }
+    },
+    "tracks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "layerId", "property", "keyframes"],
+        "properties": {
+          "id": { "type": "string", "minLength": 1 },
+          "layerId": { "type": "string", "minLength": 1 },
+          "property": {
+            "enum": [
+              "transform.x",
+              "transform.y",
+              "transform.rotation",
+              "transform.scaleX",
+              "transform.scaleY",
+              "opacity",
+              "fill"
+            ]
+          },
+          "keyframes": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["frameIndex", "value", "easing"],
+              "properties": {
+                "frameIndex": { "type": "integer", "minimum": 0 },
+                "value": { "type": "number" },
+                "colorValue": { "type": ["string", "null"] },
+                "easing": { "enum": ["linear", "ease-in", "ease-out", "ease-in-out", "cubic-bezier"] },
+                "bezier": {
+                  "type": ["object", "null"],
+                  "additionalProperties": false,
+                  "required": ["x1", "y1", "x2", "y2"],
+                  "properties": {
+                    "x1": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "y1": { "type": "number" },
+                    "x2": { "type": "number", "minimum": 0, "maximum": 1 },
+                    "y2": { "type": "number" }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "assets": { "type": "array", "items": { "type": "object" } }
+  }
+}

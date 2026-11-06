@@ -1,0 +1,32 @@
+{
+  "version": 1,
+  "values": [
+    { "name": "default composition width", "group": "composition", "value": 1920, "unit": "px", "source": "docs/SRS.md FR-001" },
+    { "name": "default composition height", "group": "composition", "value": 1080, "unit": "px", "source": "docs/SRS.md FR-001" },
+    { "name": "default fps", "group": "composition", "value": 30, "unit": "fps", "source": "docs/SRS.md FR-001" },
+    { "name": "default duration frames", "group": "composition", "value": 90, "unit": "frames", "source": "docs/SRS.md FR-001" },
+    { "name": "min composition dimension", "group": "composition", "value": 1, "unit": "px", "source": "schemas/motion-project.v1.schema.json" },
+    { "name": "max composition dimension", "group": "composition", "value": 16384, "unit": "px", "source": "schemas/motion-project.v1.schema.json" },
+    { "name": "max duration frames", "group": "composition", "value": 216000, "unit": "frames", "source": "schemas/motion-project.v1.schema.json" },
+    { "name": "demo frame 0 x", "group": "timeline", "value": 0, "unit": "px", "source": "docs/SRS.md Gherkin TC-002" },
+    { "name": "demo frame 30 x", "group": "timeline", "value": 300, "unit": "px", "source": "docs/SRS.md Gherkin TC-002" },
+    { "name": "demo frame 15 interpolated x", "group": "timeline", "value": 150, "unit": "px", "source": "docs/SRS.md Gherkin TC-002" },
+    { "name": "design viewport width", "group": "layout", "value": 1440, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "design viewport height", "group": "layout", "value": 900, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "topbar height", "group": "layout", "value": 48, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "left layer panel width", "group": "layout", "value": 240, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "right inspector panel width", "group": "layout", "value": 280, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "bottom timeline height", "group": "layout", "value": 240, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "control border radius", "group": "layout", "value": 4, "unit": "px", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "color bg", "group": "theme", "value": "#17191D", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "color panel", "group": "theme", "value": "#202329", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "color canvas", "group": "theme", "value": "#2B2E34", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "color accent", "group": "theme", "value": "#6B9CFF", "source": "docs/DESIGN_SYSTEM.md" },
+    { "name": "min canvas zoom", "group": "interaction", "value": 0.1, "unit": "ratio", "source": "docs/SRS.md FR-002" },
+    { "name": "max canvas zoom", "group": "interaction", "value": 8.0, "unit": "ratio", "source": "docs/SRS.md FR-002" },
+    { "name": "max undo history depth", "group": "interaction", "value": 100, "unit": "steps", "source": "docs/SRS.md FR-011" },
+    { "name": "paste offset delta", "group": "interaction", "value": 20, "unit": "px", "source": "docs/INTERACTION_SPEC.md FR-012" },
+    { "name": "schema version", "group": "persistence", "value": 1, "source": "schemas/motion-project.v1.schema.json" },
+    { "name": "commits per drag gesture", "group": "interaction", "value": 1, "unit": "count", "source": "docs/SRS.md NFR-005" }
+  ]
+}
