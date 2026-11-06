@@ -1,0 +1,22 @@
+* text=auto
+*.cs text eol=lf
+*.razor text eol=lf
+*.ts text eol=lf
+*.js text eol=lf
+*.cjs text eol=lf
+*.mjs text eol=lf
+*.json text eol=lf
+*.md text eol=lf
+*.sh text eol=lf
+*.slnx text eol=lf
+*.props text eol=lf
+*.csproj text eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.webp binary
+*.ico binary
+*.gif binary
+*.zip binary
