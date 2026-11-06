@@ -1,0 +1,120 @@
+{
+  "schemaVersion": 1,
+  "projectId": "f4829005-63e3-4f2f-a49a-babce0e29ec1",
+  "name": "Position Animation Demo",
+  "composition": {
+    "width": 1920,
+    "height": 1080,
+    "fps": 30,
+    "durationFrames": 90
+  },
+  "layers": [
+    {
+      "id": "layer-shape-1",
+      "kind": "rectangle",
+      "name": "Shape 1",
+      "visible": true,
+      "locked": false,
+      "zIndex": 0,
+      "geometry": {
+        "width": 260,
+        "height": 140
+      },
+      "transform": {
+        "x": 240,
+        "y": 320,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "opacity": 1,
+      "fill": "#6B9CFF"
+    },
+    {
+      "id": "layer-orb-2",
+      "kind": "ellipse",
+      "name": "Accent Orb",
+      "visible": true,
+      "locked": false,
+      "zIndex": 1,
+      "geometry": {
+        "width": 140,
+        "height": 140
+      },
+      "transform": {
+        "x": 860,
+        "y": 420,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "opacity": 0.92,
+      "fill": "#48D597"
+    },
+    {
+      "id": "layer-title-3",
+      "kind": "text",
+      "name": "Headline Label",
+      "textContent": "MOTION STUDIO 2D",
+      "fontSize": 42,
+      "visible": true,
+      "locked": false,
+      "zIndex": 2,
+      "geometry": {
+        "width": 480,
+        "height": 64
+      },
+      "transform": {
+        "x": 620,
+        "y": 180,
+        "rotation": 0,
+        "scaleX": 1,
+        "scaleY": 1
+      },
+      "opacity": 1,
+      "fill": "#E7E9ED"
+    }
+  ],
+  "tracks": [
+    {
+      "id": "track-x-1",
+      "layerId": "layer-shape-1",
+      "property": "transform.x",
+      "keyframes": [
+        { "frameIndex": 0, "value": 0, "easing": "linear" },
+        { "frameIndex": 30, "value": 300, "easing": "linear" },
+        { "frameIndex": 90, "value": 680, "easing": "ease-in-out" }
+      ]
+    },
+    {
+      "id": "track-rot-1",
+      "layerId": "layer-shape-1",
+      "property": "transform.rotation",
+      "keyframes": [
+        { "frameIndex": 0, "value": 0, "easing": "linear" },
+        { "frameIndex": 45, "value": 15, "easing": "ease-out" },
+        { "frameIndex": 90, "value": 0, "easing": "ease-in-out" }
+      ]
+    },
+    {
+      "id": "track-y-2",
+      "layerId": "layer-orb-2",
+      "property": "transform.y",
+      "keyframes": [
+        { "frameIndex": 0, "value": 420, "easing": "ease-in-out" },
+        { "frameIndex": 45, "value": 260, "easing": "ease-in-out" },
+        { "frameIndex": 90, "value": 420, "easing": "ease-in-out" }
+      ]
+    },
+    {
+      "id": "track-opacity-3",
+      "layerId": "layer-title-3",
+      "property": "opacity",
+      "keyframes": [
+        { "frameIndex": 0, "value": 0.25, "easing": "ease-out" },
+        { "frameIndex": 30, "value": 1.0, "easing": "linear" }
+      ]
+    }
+  ],
+  "assets": []
+}

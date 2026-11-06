@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+  <PropertyGroup>
+    <RootNamespace>MotionStudio.Web</RootNamespace>
+    <AssemblyName>MotionStudio.Web</AssemblyName>
+    <RequiresAspNetWebAssets>false</RequiresAspNetWebAssets>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MotionStudio.Application\MotionStudio.Application.csproj" />
+    <ProjectReference Include="..\MotionStudio.Domain\MotionStudio.Domain.csproj" />
+    <ProjectReference Include="..\MotionStudio.Infrastructure\MotionStudio.Infrastructure.csproj" />
+    <ProjectReference Include="..\MotionStudio.Desktop\MotionStudio.Desktop.csproj" />
+  </ItemGroup>
+</Project>

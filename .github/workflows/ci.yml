@@ -1,0 +1,50 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: src/MotionStudio.Renderer/package-lock.json
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+
+      - name: Install renderer dependencies
+        run: npm ci
+        working-directory: src/MotionStudio.Renderer
+      - name: Renderer typecheck
+        run: npm run typecheck
+        working-directory: src/MotionStudio.Renderer
+      - name: Renderer lint
+        run: npm run lint
+        working-directory: src/MotionStudio.Renderer
+      - name: Renderer unit tests
+        run: npm run test
+        working-directory: src/MotionStudio.Renderer
+      - name: Build renderer assets
+        run: npm run build
+        working-directory: src/MotionStudio.Renderer
+
+      - name: Environment
+        run: dotnet --info
+      - name: Restore .NET solution
+        run: dotnet restore MotionStudio.slnx
+      - name: Verify .NET formatting
+        run: dotnet format MotionStudio.slnx --verify-no-changes --no-restore
+      - name: Build .NET solution
+        run: dotnet build MotionStudio.slnx -c Release --no-restore -p:ContinuousIntegrationBuild=true
+      - name: Test .NET solution
+        run: dotnet test MotionStudio.slnx -c Release --no-build --no-restore -p:ContinuousIntegrationBuild=true

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MotionStudio.Infrastructure</RootNamespace>
+    <AssemblyName>MotionStudio.Infrastructure</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="SkiaSharp" />
+    <PackageReference Include="SkiaSharp.NativeAssets.Win32" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MotionStudio.Application\MotionStudio.Application.csproj" />
+    <ProjectReference Include="..\MotionStudio.Domain\MotionStudio.Domain.csproj" />
+  </ItemGroup>
+</Project>

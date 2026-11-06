@@ -1,9 +1,18 @@
 # MotionStudio
 
 **版本：0.1.0**  
-**技术栈：.NET 10 LTS + ASP.NET Core Blazor Interactive Server + Electron Desktop Host + TypeScript / Konva.js Canvas 2D**
+**技术栈：.NET 10 LTS + ASP.NET Core Blazor + SkiaSharp 3.119.0 + Electron 33 Desktop Host + TypeScript Native HTML5 Canvas 2D**
 
-MotionStudio 是一款以 Jitter 工作台体验为主参考、以 Lottielab 时间轴与关键帧交互为主参考、以 Rive 为后续状态机演进参考的原创专业 2D 矢量与图形动效制作软件。
+MotionStudio 是一款以 Jitter 工作台体验为主参考、以 Lottielab 时间轴与关键帧交互为主参考、以 Rive 与 SVGator 为状态机及矢量动效参考的原创专业 2D 矢量与图形动效设计软件。
+
+## 快速构建与验证
+
+```powershell
+dotnet build MotionStudio.slnx -c Release
+dotnet test MotionStudio.slnx -c Release --no-build
+npm run build
+npm start
+```
 
 ## 目录索引
 

@@ -1,0 +1,1623 @@
+@page "/"
+@using System.Globalization
+@implements IAsyncDisposable
+@inject EditorWorkspaceService Workspace
+@inject IProjectRepository Repository
+@inject IDesktopHostBridge HostBridge
+@inject IJSRuntime JS
+
+<PageTitle>MotionStudio — @Workspace.CurrentDocument.Name@(Workspace.IsDirty ? " *" : "")</PageTitle>
+
+<div class="ms-workbench"
+     data-theme="@(IsDarkTheme ? "dark" : "light")"
+     style="--left-panel-width: @(LeftPanelWidth)px; --inspector-width: @(InspectorWidth)px; --timeline-height: @(TimelineHeight)px;"
+     tabindex="0"
+     @onkeydown="HandleGlobalKeyDown">
+
+    <!-- 1. Electron Header Bar (44px) -->
+    <header class="ms-header-bar" data-testid="workbench-topbar">
+        <div class="ms-header-left">
+            <div class="ms-brand" title="@HostBridge.HostModeLabel">
+                <span class="ms-brand-logo">
+                    <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="fill:currentColor;stroke:none;">
+                        <polygon points="7,5 19,12 7,19" />
+                    </svg>
+                </span>
+                <span class="ms-brand-title">MotionStudio</span>
+            </div>
+
+            <div class="ms-v-sep"></div>
+
+            <button type="button" class="ms-project-crumb" data-testid="btn-open-project" @onclick="ToggleFileModal" title="Open or Save Project (.motion.json)">
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z" />
+                </svg>
+                <span data-testid="project-name">@Workspace.CurrentDocument.Name</span>
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="ms-header-right">
+            <span class="ms-header-tag" title="Authoritative Document Revision">r@(Workspace.CurrentDocument.Revision.Value)</span>
+            <button type="button" class="ms-icon-action" data-testid="btn-undo" disabled="@(!Workspace.CanUndo)" @onclick="UndoAsync" title="Undo (Ctrl+Z)">
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <path d="M9 14 4 9l5-5" />
+                    <path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5v0a5.5 5.5 0 0 1-5.5 5.5H11" />
+                </svg>
+            </button>
+            <button type="button" class="ms-icon-action" data-testid="btn-redo" disabled="@(!Workspace.CanRedo)" @onclick="RedoAsync" title="Redo (Ctrl+Y)">
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <path d="m15 14 5-5-5-5" />
+                    <path d="M20 9H9.5A5.5 5.5 0 0 0 4 14.5v0A5.5 5.5 0 0 0 9.5 20H13" />
+                </svg>
+            </button>
+        </div>
+    </header>
+
+    <!-- 2. Main Editor Toolbar (50px) -->
+    <div class="ms-main-toolbar" role="toolbar" aria-label="Editor Tools">
+        <div class="ms-toolbar-left">
+            <div class="ms-toolbar-menu-slot">
+                <button type="button" class="ms-tool-btn" data-testid="btn-new-project" @onclick="ToggleNewProjectModal" title="New Project / Composition Settings">
+                    <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                        <line x1="4" y1="7" x2="20" y2="7" />
+                        <line x1="4" y1="12" x2="20" y2="12" />
+                        <line x1="4" y1="17" x2="20" y2="17" />
+                    </svg>
+                </button>
+            </div>
+
+            <button type="button" class="ms-tool-btn @(ActiveTool == "select" ? "is-active" : "")" @onclick='() => SetActiveTool("select")' title="Selection Tool (V)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <path d="m4 4 7.07 17 2.51-7.39L21 11.07z" />
+                </svg>
+            </button>
+
+            <button type="button" class="ms-tool-btn @(ActiveTool == "pan" ? "is-active" : "")" @onclick='() => SetActiveTool("pan")' title="Hand / Pan Viewport (H)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <path d="M18 11V6a2 2 0 0 0-4 0v4" />
+                    <path d="M14 10V4a2 2 0 0 0-4 0v6" />
+                    <path d="M10 10.5V6a2 2 0 0 0-4 0v8" />
+                    <path d="M18 8a2 2 0 1 1 4 0v6a8 8 0 0 1-8 8h-2c-2.8 0-4.5-.86-5.99-2.34l-3.6-3.6a2 2 0 0 1 2.83-2.82L7 15" />
+                </svg>
+            </button>
+
+            <button type="button" class="ms-tool-btn" data-testid="btn-add-rect" @onclick="() => AddShapeAsync(LayerKind.Rectangle)" title="Add Rectangle Layer (R)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <rect x="4" y="5" width="16" height="14" rx="2" />
+                </svg>
+            </button>
+
+            <button type="button" class="ms-tool-btn" data-testid="btn-add-ellipse" @onclick="() => AddShapeAsync(LayerKind.Ellipse)" title="Add Ellipse Layer (O)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="8" />
+                </svg>
+            </button>
+
+            <button type="button" class="ms-tool-btn" data-testid="btn-svg-import" @onclick="ToggleSvgModal" title="Import Vector SVG Path">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <path d="M4 20c4-10 12-10 16-16" />
+                    <circle cx="4" cy="20" r="2" />
+                    <circle cx="20" cy="4" r="2" />
+                </svg>
+            </button>
+
+            <button type="button" class="ms-tool-btn" data-testid="btn-add-text" @onclick="() => AddShapeAsync(LayerKind.Text)" title="Add Text Layer (T)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <polyline points="4 7 4 4 20 4 20 7" />
+                    <line x1="9" y1="20" x2="15" y2="20" />
+                    <line x1="12" y1="4" x2="12" y2="20" />
+                </svg>
+            </button>
+
+            <div class="ms-v-sep"></div>
+
+            <button type="button" class="ms-btn" @onclick="PreviewFromStartAsync" title="Preview from Frame 0">
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="fill:currentColor;stroke:none;">
+                    <polygon points="6,4 20,12 6,20" />
+                </svg>
+                <span>Preview</span>
+            </button>
+
+            <button type="button" class="ms-btn" data-testid="btn-play-top" @onclick="TogglePlayAsync" title="Play / Pause (Space)">
+                @if (Workspace.IsPlaying)
+                {
+                    <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                        <rect x="6" y="5" width="4" height="14" />
+                        <rect x="14" y="5" width="4" height="14" />
+                    </svg>
+                    <span>Pause</span>
+                }
+                else
+                {
+                    <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="fill:currentColor;stroke:none;">
+                        <polygon points="6,4 20,12 6,20" />
+                    </svg>
+                    <span>Play</span>
+                }
+            </button>
+
+            <button type="button" class="ms-btn ms-btn-primary" data-testid="btn-export-modal" @onclick="OpenExportModalAsync" title="Export Frame (SkiaSharp PNG / Vector SVG)">
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="17 8 12 3 7 8" />
+                    <line x1="12" y1="3" x2="12" y2="15" />
+                </svg>
+                <span>Export</span>
+                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                    <polyline points="6 9 12 15 18 9" />
+                </svg>
+            </button>
+        </div>
+
+        <div class="ms-toolbar-right">
+            <button type="button" class="ms-save-indicator" data-testid="btn-quick-save" @onclick="QuickSaveAsync" title="Save Project (Ctrl+S)">
+                <span class="ms-save-dot @(Workspace.IsDirty ? "is-dirty" : "")"></span>
+                <span>@(Workspace.IsDirty ? "Unsaved changes" : "All changes saved")</span>
+            </button>
+
+            <button type="button" class="ms-icon-action" @onclick="QuickSaveAsync" title="Sync Project Snapshot to Disk">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+                </svg>
+            </button>
+
+            <div class="ms-zoom-pill">
+                <button type="button" class="ms-zoom-step" @onclick="() => AdjustZoomAsync(-0.10)" title="Zoom Out">-</button>
+                <span class="ms-zoom-label" data-testid="zoom-readout">@((int)Math.Round(Workspace.CanvasZoom * 100))%</span>
+                <button type="button" class="ms-zoom-step" @onclick="() => AdjustZoomAsync(0.10)" title="Zoom In">+</button>
+            </div>
+
+            <button type="button" class="ms-icon-action" @onclick="ResetZoomAsync" title="Fit Artboard (75%)">
+                <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                    <path d="M8 3H5a2 2 0 0 0-2 2v3" />
+                    <path d="M21 8V5a2 2 0 0 0-2-2h-3" />
+                    <path d="M3 16v3a2 2 0 0 0 2 2h3" />
+                    <path d="M16 21h3a2 2 0 0 0 2-2v-3" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Inline Recovery / Status Banner -->
+    @if (!string.IsNullOrWhiteSpace(Workspace.StatusBannerMessage))
+    {
+        <div class="ms-banner @(Workspace.StatusBannerIsError ? "is-error" : "")" data-testid="status-banner" role="status">
+            <div>
+                @if (!string.IsNullOrWhiteSpace(Workspace.StatusBannerErrorCode))
+                {
+                    <strong>[@Workspace.StatusBannerErrorCode] </strong>
+                }
+                <span>@Workspace.StatusBannerMessage</span>
+            </div>
+            <div style="display:flex;gap:6px;">
+                @if (Workspace.StatusBannerIsError)
+                {
+                    <button type="button" class="ms-btn ms-btn-sm" @onclick="LoadDemoAsync">Restore Scene 01</button>
+                }
+                <button type="button" class="ms-btn ms-btn-sm" @onclick="Workspace.DismissBanner">Dismiss</button>
+            </div>
+        </div>
+    }
+
+    <!-- 3. Core Editor Body -->
+    <div class="ms-editor-body">
+        <!-- Left + Center + Bottom Timeline Stack -->
+        <div class="ms-left-center-stack">
+            <div class="ms-upper-stage-row">
+                <!-- 60px Left Tool Rail -->
+                <nav class="ms-tool-rail" aria-label="Workspace Sections">
+                    <div class="ms-rail-group">
+                        <button type="button" class="ms-rail-btn @(LeftSidebarTab == "layers" ? "is-active" : "")" @onclick='() => LeftSidebarTab = "layers"' title="Scene Layers">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2" />
+                                <polyline points="2 17 12 22 22 17" />
+                                <polyline points="2 12 12 17 22 12" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn @(LeftSidebarTab == "assets" ? "is-active" : "")" @onclick='() => LeftSidebarTab = "assets"' title="Vector &amp; Media Assets">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <rect x="3" y="3" width="18" height="18" rx="2" />
+                                <circle cx="9" cy="9" r="2" />
+                                <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn @(LeftSidebarTab == "presets" ? "is-active" : "")" @onclick='() => LeftSidebarTab = "presets"' title="Motion Presets">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <rect x="3" y="3" width="7" height="7" rx="1" />
+                                <rect x="14" y="3" width="7" height="7" rx="1" />
+                                <rect x="14" y="14" width="7" height="7" rx="1" />
+                                <rect x="3" y="14" width="7" height="7" rx="1" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn @(TimelineTab == "graph" ? "is-active" : "")" @onclick="ToggleGraphTab" title="Easing Curve Graph View">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <circle cx="6" cy="18" r="2" />
+                                <circle cx="18" cy="6" r="2" />
+                                <path d="M8 18c6 0 4-12 8-12" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn" @onclick="RunSkiaBenchmarkAsync" title="Run SkiaSharp 100-Node Render Benchmark">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <polyline points="16 18 22 12 16 6" />
+                                <polyline points="8 6 2 12 8 18" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn" @onclick="ToggleFileModal" title="Project Files">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <rect x="2" y="7" width="20" height="14" rx="2" />
+                                <path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" />
+                            </svg>
+                        </button>
+                    </div>
+
+                    <div class="ms-rail-group">
+                        <button type="button" class="ms-rail-btn @(Workspace.ShowGrid ? "is-active" : "")" @onclick="ToggleGridAsync" title="Toggle Workspace Dot Grid">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <circle cx="12" cy="12" r="3" />
+                                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.26.604.852.997 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-rail-btn" @onclick="ToggleDarkTheme" title="Toggle Light / Dark Editor Theme">
+                            <svg class="ms-svg-icon" viewBox="0 0 24 24">
+                                <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+                            </svg>
+                        </button>
+                    </div>
+                </nav>
+
+                <!-- 270px Left Hierarchy Panel -->
+                <aside class="ms-layer-panel" data-testid="workbench-layer-tree" aria-label="Scene Hierarchy">
+                    <div class="ms-panel-tabs">
+                        <div class="ms-tab-list">
+                            <button type="button" class="ms-tab-btn @(LeftSidebarTab == "layers" ? "is-active" : "")" @onclick='() => LeftSidebarTab = "layers"'>Layers</button>
+                            <button type="button" class="ms-tab-btn @(LeftSidebarTab == "assets" ? "is-active" : "")" @onclick='() => LeftSidebarTab = "assets"'>Assets</button>
+                        </div>
+                        <div style="display:flex;gap:2px;">
+                            <button type="button" class="ms-icon-action" @onclick="() => AddShapeAsync(LayerKind.Rectangle)" title="Quick Add Layer">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                    <line x1="12" y1="5" x2="12" y2="19" />
+                                    <line x1="5" y1="12" x2="19" y2="12" />
+                                </svg>
+                            </button>
+                            <button type="button" class="ms-icon-action" @onclick="ToggleSearchBox" title="Filter Layers">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                    <circle cx="11" cy="11" r="7" />
+                                    <line x1="20" y1="20" x2="16.2" y2="16.2" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    @if (ShowLayerSearch)
+                    {
+                        <div class="ms-layer-search-box">
+                            <input type="text" class="ms-input" placeholder="Search layers..." @bind="LayerFilterText" @bind:event="oninput" />
+                        </div>
+                    }
+
+                    @if (LeftSidebarTab == "assets")
+                    {
+                        <div class="ms-layer-tree-scroll" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+                            <button type="button" class="ms-btn" style="width:100%;" @onclick="ToggleSvgModal">Import Sanitized SVG</button>
+                            <button type="button" class="ms-btn" style="width:100%;" @onclick="LoadDemoAsync">Reload Scene 01 Starter</button>
+                            @if (Workspace.CurrentDocument.Assets.Count == 0)
+                            {
+                                <p style="color:var(--ms-muted);font-size:11.5px;margin:6px 0 0 0;">No imported external SVG assets yet.</p>
+                            }
+                            else
+                            {
+                                @foreach (AssetRef asset in Workspace.CurrentDocument.Assets)
+                                {
+                                    <div class="ms-layer-item" style="padding-left:10px;">
+                                        <span>@asset.Name (@asset.Kind.ToUpperInvariant())</span>
+                                    </div>
+                                }
+                            }
+                        </div>
+                    }
+                    else if (LeftSidebarTab == "presets")
+                    {
+                        LayerNode? presetTarget = Workspace.GetPrimarySelectedLayer();
+                        <div class="ms-layer-tree-scroll" style="padding:12px;display:flex;flex-direction:column;gap:8px;">
+                            <span style="font-weight:600;color:var(--ms-text);">Motion Presets</span>
+                            <button type="button" class="ms-btn" disabled="@(presetTarget is null || presetTarget.Locked)" @onclick="() => ApplySelectedPresetAsync(MotionPresetKind.FadeIn)">Fade In (Opacity 0 to 100%)</button>
+                            <button type="button" class="ms-btn" disabled="@(presetTarget is null || presetTarget.Locked)" @onclick="() => ApplySelectedPresetAsync(MotionPresetKind.SlideInRight)">Slide In Horizontal</button>
+                            <button type="button" class="ms-btn" disabled="@(presetTarget is null || presetTarget.Locked)" @onclick="() => ApplySelectedPresetAsync(MotionPresetKind.PopScale)">Elastic Pop Scale</button>
+                            <button type="button" class="ms-btn" disabled="@(presetTarget is null || presetTarget.Locked)" @onclick="() => ApplySelectedPresetAsync(MotionPresetKind.Pulse)">Breathing Pulse</button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="ms-scene-root-row">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <polyline points="6 9 12 15 18 9" />
+                            </svg>
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <rect x="3" y="4" width="18" height="16" rx="2" />
+                                <line x1="7" y1="4" x2="7" y2="20" />
+                                <line x1="17" y1="4" x2="17" y2="20" />
+                            </svg>
+                            <span>Scene 01</span>
+                        </div>
+
+                        <div class="ms-layer-tree-scroll" role="listbox" aria-label="Layer List">
+                            @foreach (LayerNode layer in GetFilteredLayers())
+                            {
+                                bool isSelected = Workspace.SelectedLayerIds.Contains(layer.Id, StringComparer.Ordinal);
+                                <div class="ms-layer-item @(isSelected ? "is-selected" : "") @(!layer.Visible ? "is-hidden" : "")"
+                                     data-testid="layer-row-@layer.Id"
+                                     @onclick="(e) => SelectLayerAsync(layer.Id, e.CtrlKey || e.ShiftKey)">
+                                    <div class="ms-layer-item-left">
+                                        @RenderLayerKindIcon(layer)
+                                        <span class="ms-layer-item-name" title="@layer.Name">@layer.Name</span>
+                                    </div>
+                                    <div class="ms-layer-item-actions" @onclick:stopPropagation="true">
+                                        <button type="button" class="ms-icon-action" data-testid="btn-vis-@layer.Id" title="Toggle Visibility" @onclick="() => ToggleVisibilityAsync(layer.Id)">
+                                            @if (layer.Visible)
+                                            {
+                                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                                    <path d="M2 12s3.5-6 10-6 10 6 10 6-3.5 6-10 6-10-6-10-6Z" />
+                                                    <circle cx="12" cy="12" r="2.5" />
+                                                </svg>
+                                            }
+                                            else
+                                            {
+                                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                                    <path d="M9.88 9.88a3 3 0 1 0 4.24 4.24" />
+                                                    <line x1="3" y1="3" x2="21" y2="21" />
+                                                </svg>
+                                            }
+                                        </button>
+                                        <button type="button" class="ms-icon-action" data-testid="btn-lock-@layer.Id" title="Toggle Lock" @onclick="() => ToggleLockAsync(layer.Id)">
+                                            @if (layer.Locked)
+                                            {
+                                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                                                    <path d="M8 11V7a4 4 0 0 1 8 0v4" />
+                                                </svg>
+                                            }
+                                            else
+                                            {
+                                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="opacity:0.45;">
+                                                    <rect x="5" y="11" width="14" height="10" rx="2" />
+                                                    <path d="M8 11V7a4 4 0 0 1 7.6-1.5" />
+                                                </svg>
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                </aside>
+
+                <!-- Central Canvas Workspace -->
+                <main class="ms-stage-workspace @(Workspace.ShowGrid ? "" : "no-grid")" data-testid="workbench-stage-viewport">
+                    <div class="ms-artboard-wrapper" style="transform: scale(@((Workspace.CanvasZoom / 0.75).ToString("F3", CultureInfo.InvariantCulture))); transform-origin: center center;">
+                        <div class="ms-artboard-caption">
+                            <span>Artboard 01</span>
+                            <span>|</span>
+                            <span>@Workspace.CurrentDocument.Composition.Width × @Workspace.CurrentDocument.Composition.Height</span>
+                        </div>
+                        <div class="ms-artboard-frame">
+                            <div id="motion-canvas-host" class="ms-canvas-host" data-testid="motion-canvas-host"></div>
+                        </div>
+                        <script id="ms-initial-snapshot" type="application/json">@((MarkupString)GetInitialSnapshotJson())</script>
+                    </div>
+                </main>
+            </div>
+
+            <!-- 330px Bottom Timeline Panel -->
+            <section class="ms-timeline-panel" data-testid="workbench-timeline" aria-label="Animation Timeline">
+                <div class="ms-timeline-topbar">
+                    <div class="ms-tab-list">
+                        <button type="button" class="ms-tab-btn @(TimelineTab == "timeline" ? "is-active" : "")" @onclick='() => TimelineTab = "timeline"'>Timeline</button>
+                        <button type="button" class="ms-tab-btn @(TimelineTab == "graph" ? "is-active" : "")" @onclick='() => TimelineTab = "graph"'>Graph</button>
+                    </div>
+
+                    <div class="ms-timeline-transport">
+                        <button type="button" class="ms-icon-action" @onclick="() => SeekFrameAsync(0)" title="Jump to Start">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <polygon points="19 20 9 12 19 4 19 20" />
+                                <line x1="5" y1="19" x2="5" y2="5" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-icon-action" @onclick="() => SeekFrameAsync(Math.Max(0, Workspace.CurrentFrameIndex - 5))" title="Step Back 5 Frames">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <polygon points="11 19 2 12 11 5 11 19" />
+                                <polygon points="22 19 13 12 22 5 22 19" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-play-circle-btn" data-testid="btn-play-pause" @onclick="TogglePlayAsync" title="Play / Pause (Space)">
+                            @if (Workspace.IsPlaying)
+                            {
+                                <svg class="ms-svg-icon" viewBox="0 0 24 24" style="fill:currentColor;stroke:none;">
+                                    <rect x="6" y="4" width="4" height="16" />
+                                    <rect x="14" y="4" width="4" height="16" />
+                                </svg>
+                            }
+                            else
+                            {
+                                <svg class="ms-svg-icon" viewBox="0 0 24 24" style="fill:currentColor;stroke:none;">
+                                    <polygon points="6,4 20,12 6,20" />
+                                </svg>
+                            }
+                        </button>
+                        <button type="button" class="ms-icon-action" @onclick="() => SeekFrameAsync(Math.Min(Workspace.CurrentDocument.Composition.DurationFrames, Workspace.CurrentFrameIndex + 5))" title="Step Forward 5 Frames">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <polygon points="13 19 22 12 13 5 13 19" />
+                                <polygon points="2 19 11 12 2 5 2 19" />
+                            </svg>
+                        </button>
+                        <button type="button" class="ms-icon-action" @onclick="() => SeekFrameAsync(Workspace.CurrentDocument.Composition.DurationFrames)" title="Jump to End">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                <polygon points="5 4 15 12 5 20 5 4" />
+                                <line x1="19" y1="5" x2="19" y2="19" />
+                            </svg>
+                        </button>
+
+                        <span class="ms-timecode-pill" data-testid="timeline-readout">
+                            @FormatTimecode(Workspace.CurrentFrameIndex, Workspace.CurrentDocument.Composition.Fps)
+                        </span>
+
+                        <div class="ms-fps-group">
+                            <span>FPS</span>
+                            <span class="ms-timecode-pill" style="font-weight:500;">@Workspace.CurrentDocument.Composition.Fps</span>
+                        </div>
+                    </div>
+
+                    <div class="ms-timeline-zoom-group">
+                        <input type="range"
+                               class="ms-range-accent"
+                               style="width:110px;"
+                               data-testid="timeline-slider"
+                               min="0"
+                               max="@Workspace.CurrentDocument.Composition.DurationFrames"
+                               value="@Workspace.CurrentFrameIndex"
+                               title="Scrub Frame (@Workspace.CurrentFrameIndex / @Workspace.CurrentDocument.Composition.DurationFrames)"
+                               @oninput="(e) => OnFrameSliderChangedAsync(e.Value?.ToString())" />
+                    </div>
+                </div>
+
+                @if (TimelineTab == "graph")
+                {
+                    <div class="ms-graph-view" data-testid="timeline-graph-view">
+                        <div class="ms-graph-card">
+                            <span style="font-size:11.5px;font-weight:600;margin-bottom:6px;">Active Easing: @SelectedEasingWire</span>
+                            <svg viewBox="0 0 120 100" style="width:100%;flex:1;overflow:visible;">
+                                <line x1="10" y1="90" x2="110" y2="90" stroke="var(--ms-border)" stroke-width="1" />
+                                <line x1="10" y1="10" x2="10" y2="90" stroke="var(--ms-border)" stroke-width="1" />
+                                <path d="@BuildEasingSvgPath()" fill="none" stroke="var(--ms-accent)" stroke-width="2.5" />
+                            </svg>
+                        </div>
+                        <div style="flex:1;display:flex;flex-direction:column;gap:8px;">
+                            <span style="font-weight:600;font-size:13px;">Cubic Bezier &amp; Interpolation Curve Editor</span>
+                            <span style="color:var(--ms-muted);">Evaluated deterministically in both C# (`TimelineEvaluator`) and TypeScript (`requestAnimationFrame` Canvas 2D bridge).</span>
+                            <div class="ms-xy-grid" style="max-width:360px;">
+                                <div class="ms-prop-box"><span class="ms-prop-tag">X1</span><input type="number" step="0.05" min="0" max="1" class="ms-input" @bind="BezierX1" /></div>
+                                <div class="ms-prop-box"><span class="ms-prop-tag">Y1</span><input type="number" step="0.05" class="ms-input" @bind="BezierY1" /></div>
+                                <div class="ms-prop-box"><span class="ms-prop-tag">X2</span><input type="number" step="0.05" min="0" max="1" class="ms-input" @bind="BezierX2" /></div>
+                                <div class="ms-prop-box"><span class="ms-prop-tag">Y2</span><input type="number" step="0.05" class="ms-input" @bind="BezierY2" /></div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="ms-timeline-body">
+                        <!-- Time Ruler -->
+                        <div class="ms-timeline-ruler-row">
+                            <div class="ms-tl-left-col">
+                                <span style="font-size:11px;font-weight:600;color:var(--ms-muted);">Layers &amp; Properties</span>
+                            </div>
+                            <div class="ms-tl-right-col" data-testid="timeline-ruler">
+                                @{
+                                    int fps = Math.Max(1, Workspace.CurrentDocument.Composition.Fps);
+                                    int totalFrames = Math.Max(1, Workspace.CurrentDocument.Composition.DurationFrames);
+                                    int stepFrames = Math.Max(fps / 2, totalFrames / 8);
+                                }
+                                @for (int f = 0; f <= totalFrames; f += stepFrames)
+                                {
+                                    int tickFrame = f;
+                                    double pct = GetFramePercentage(tickFrame);
+                                    bool nearPlayhead = Math.Abs(Workspace.CurrentFrameIndex - tickFrame) < (stepFrames / 2);
+                                    <button type="button"
+                                            class="ms-ruler-mark @(nearPlayhead ? "is-current" : "")"
+                                            style="left: @(pct.ToString("F2", CultureInfo.InvariantCulture))%;"
+                                            @onclick="() => SeekFrameAsync(tickFrame)">
+                                        @FormatRulerLabel(tickFrame, fps)
+                                    </button>
+                                }
+                                <div class="ms-playhead-marker"
+                                     data-testid="timeline-playhead"
+                                     style="left: @(GetFramePercentage(Workspace.CurrentFrameIndex).ToString("F2", CultureInfo.InvariantCulture))%;">
+                                    <div class="ms-playhead-head"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Track Rows -->
+                        <div class="ms-timeline-rows-scroll" data-testid="timeline-tracks">
+                            @{
+                                LayerNode? primaryLayer = Workspace.GetPrimarySelectedLayer();
+                            }
+                            @if (primaryLayer is not null)
+                            {
+                                var primaryTracks = Workspace.CurrentDocument.Tracks
+                                    .Where(t => string.Equals(t.LayerId, primaryLayer.Id, StringComparison.Ordinal))
+                                    .ToList();
+
+                                <div class="ms-tl-row is-group-header">
+                                    <div class="ms-tl-left-col">
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><polyline points="6 9 12 15 18 9" /></svg>
+                                            @RenderLayerKindIcon(primaryLayer)
+                                            <span>@primaryLayer.Name</span>
+                                        </div>
+                                        <button type="button" class="ms-icon-action" title="Add Position Keyframe" @onclick="() => AddKeyframeAtCurrentFrameAsync(primaryLayer.Id, AnimatableProperty.TransformX, primaryLayer.Transform.X)">
+                                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><polygon points="12 3 21 12 12 21 3 12" /></svg>
+                                        </button>
+                                    </div>
+                                    <div class="ms-tl-lane">
+                                        <div class="ms-playhead-marker" style="left: @(GetFramePercentage(Workspace.CurrentFrameIndex).ToString("F2", CultureInfo.InvariantCulture))%;"></div>
+                                    </div>
+                                </div>
+
+                                @foreach (AnimationTrack track in primaryTracks)
+                                {
+                                    double minPct = track.Keyframes.Count > 0 ? GetFramePercentage(track.Keyframes[0].FrameIndex) : 0;
+                                    double maxPct = track.Keyframes.Count > 0 ? GetFramePercentage(track.Keyframes[^1].FrameIndex) : 0;
+                                    double widthPct = Math.Max(1.5, maxPct - minPct);
+                                    bool isPosTrack = track.Property is AnimatableProperty.TransformX or AnimatableProperty.TransformY;
+
+                                    <div class="ms-tl-row is-subtrack" data-testid="track-row-@track.Id">
+                                        <div class="ms-tl-left-col">
+                                            <span>@GetFriendlyPropertyLabel(track.Property)</span>
+                                            <div style="display:flex;align-items:center;gap:2px;">
+                                                @if (track.Keyframes.Any(k => k.FrameIndex == Workspace.CurrentFrameIndex))
+                                                {
+                                                    <button type="button" class="ms-icon-action" title="Delete Keyframe at Playhead" @onclick="() => DeleteKeyframeAsync(track.Id, Workspace.CurrentFrameIndex)">
+                                                        <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                                    </button>
+                                                }
+                                            </div>
+                                        </div>
+                                        <div class="ms-tl-lane">
+                                            <div class="ms-playhead-marker" style="left: @(GetFramePercentage(Workspace.CurrentFrameIndex).ToString("F2", CultureInfo.InvariantCulture))%;"></div>
+                                            @if (track.Keyframes.Count >= 2)
+                                            {
+                                                <div class="ms-tl-duration-bar @(isPosTrack ? "is-pos" : "")"
+                                                     style="left: @(minPct.ToString("F2", CultureInfo.InvariantCulture))%; width: @(widthPct.ToString("F2", CultureInfo.InvariantCulture))%;"></div>
+                                            }
+                                            @foreach (Keyframe kf in track.Keyframes)
+                                            {
+                                                double kfPct = GetFramePercentage(kf.FrameIndex);
+                                                bool isAtCurrent = kf.FrameIndex == Workspace.CurrentFrameIndex;
+                                                <button type="button"
+                                                        class="ms-kf-diamond @(isAtCurrent ? "is-active" : "")"
+                                                        data-testid="kf-@track.Id-@kf.FrameIndex"
+                                                        style="left: @(kfPct.ToString("F2", CultureInfo.InvariantCulture))%;"
+                                                        title="@GetFriendlyPropertyLabel(track.Property) at frame @kf.FrameIndex = @kf.Value (@kf.Easing.ToWireName())"
+                                                        @onclick="() => SeekFrameAsync(kf.FrameIndex)">
+                                                </button>
+                                            }
+                                        </div>
+                                    </div>
+                                }
+                            }
+
+                            @foreach (LayerNode otherLayer in Workspace.CurrentDocument.Layers.Where(l => !l.Locked && (primaryLayer is null || !string.Equals(l.Id, primaryLayer.Id, StringComparison.Ordinal))).OrderBy(l => GetConceptDisplayOrder(l)))
+                            {
+                                <div class="ms-tl-row" @onclick="() => SelectLayerAsync(otherLayer.Id, false)" style="cursor:pointer;">
+                                    <div class="ms-tl-left-col">
+                                        <div style="display:flex;align-items:center;gap:6px;">
+                                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6" /></svg>
+                                            @RenderLayerKindIcon(otherLayer)
+                                            <span>@otherLayer.Name</span>
+                                        </div>
+                                    </div>
+                                    <div class="ms-tl-lane">
+                                        <div class="ms-playhead-marker" style="left: @(GetFramePercentage(Workspace.CurrentFrameIndex).ToString("F2", CultureInfo.InvariantCulture))%;"></div>
+                                        <div class="ms-tl-duration-bar" style="left: 8%; width: 72%; opacity: 0.65;"></div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </section>
+        </div>
+
+        <!-- 4. Full-Height Right Inspector (320px) -->
+        <aside class="ms-inspector-panel" data-testid="workbench-inspector" aria-label="Property Inspector">
+            <div class="ms-mode-switcher">
+                <button type="button" class="ms-mode-pill @(InspectorMode == "design" ? "is-active" : "")" @onclick='() => InspectorMode = "design"'>Design</button>
+                <button type="button" class="ms-mode-pill @(InspectorMode == "animate" ? "is-active" : "")" @onclick='() => InspectorMode = "animate"'>Animate</button>
+            </div>
+
+            @{
+                LayerNode? selected = Workspace.GetPrimarySelectedLayer();
+                EvaluatedLayerState? evaluatedSelected = selected is null
+                    ? null
+                    : TimelineEvaluator.EvaluateLayerAtFrame(Workspace.CurrentDocument, selected, Workspace.CurrentFrameIndex);
+            }
+
+            @if (selected is null || evaluatedSelected is null)
+            {
+                <div class="ms-insp-section">
+                    <div class="ms-insp-header"><span>Composition</span></div>
+                    <span style="color:var(--ms-muted);">@Workspace.CurrentDocument.Composition.Width × @Workspace.CurrentDocument.Composition.Height px · @Workspace.CurrentDocument.Composition.Fps FPS</span>
+                    <button type="button" class="ms-btn" @onclick="ToggleNewProjectModal">Composition Settings</button>
+                </div>
+            }
+            else
+            {
+                <!-- Transform -->
+                <div class="ms-insp-section">
+                    <div class="ms-insp-header">
+                        <span>Transform</span>
+                        <div style="display:flex;gap:4px;">
+                            <button type="button" class="ms-icon-action" disabled="@selected.Locked" title="Delete Selected Layer" @onclick="DeleteSelectedAsync">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                    <polyline points="3 6 5 6 21 6" />
+                                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" />
+                                </svg>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="ms-xy-grid">
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag">X</span>
+                            <input type="number" step="1" class="ms-input" data-testid="input-prop-x" disabled="@selected.Locked"
+                                   value="@evaluatedSelected.X.ToString("F0", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnNumericPropertyChangedAsync(AnimatableProperty.TransformX, e.Value?.ToString(), evaluatedSelected.X)" />
+                        </div>
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag">Y</span>
+                            <input type="number" step="1" class="ms-input" data-testid="input-prop-y" disabled="@selected.Locked"
+                                   value="@evaluatedSelected.Y.ToString("F0", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnNumericPropertyChangedAsync(AnimatableProperty.TransformY, e.Value?.ToString(), evaluatedSelected.Y)" />
+                        </div>
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag">W</span>
+                            <input type="number" min="1" step="1" class="ms-input" data-testid="input-geom-w" disabled="@selected.Locked"
+                                   value="@selected.Geometry.Width.ToString("F0", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnGeometryChangedAsync(e.Value?.ToString(), null, selected.Geometry)" />
+                        </div>
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag">H</span>
+                            <input type="number" min="1" step="1" class="ms-input" data-testid="input-geom-h" disabled="@selected.Locked"
+                                   value="@selected.Geometry.Height.ToString("F0", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnGeometryChangedAsync(null, e.Value?.ToString(), selected.Geometry)" />
+                        </div>
+                    </div>
+
+                    <div class="ms-xy-grid">
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag" style="width:auto;">Rotation</span>
+                            <input type="number" step="1" class="ms-input" data-testid="input-prop-rot" disabled="@selected.Locked"
+                                   value="@evaluatedSelected.Rotation.ToString("F1", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnNumericPropertyChangedAsync(AnimatableProperty.TransformRotation, e.Value?.ToString(), evaluatedSelected.Rotation)" />
+                        </div>
+                        <div class="ms-prop-box">
+                            <span class="ms-prop-tag" style="width:auto;">Scale</span>
+                            <input type="number" step="0.05" class="ms-input" data-testid="input-prop-scalex" disabled="@selected.Locked"
+                                   value="@evaluatedSelected.ScaleX.ToString("F2", CultureInfo.InvariantCulture)"
+                                   @onchange="(e) => OnScaleUniformChangedAsync(e.Value?.ToString(), evaluatedSelected.ScaleX)" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fill -->
+                <div class="ms-insp-section">
+                    <div class="ms-insp-header">
+                        <span>Fill</span>
+                        <button type="button" class="ms-icon-action" disabled="@selected.Locked" title="Keyframe Fill Color" @onclick="() => AddColorKeyframeAtCurrentFrameAsync(selected.Id, evaluatedSelected.Fill)">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><polygon points="12 3 21 12 12 21 3 12" /></svg>
+                        </button>
+                    </div>
+                    <div class="ms-color-row">
+                        <input type="color" class="ms-color-swatch" disabled="@selected.Locked"
+                               value="@evaluatedSelected.Fill"
+                               @onchange="(e) => OnColorPropertyChangedAsync(e.Value?.ToString() ?? evaluatedSelected.Fill)" />
+                        <input type="text" class="ms-input" data-testid="input-prop-fill" disabled="@selected.Locked"
+                               value="@evaluatedSelected.Fill"
+                               @onchange="(e) => OnColorPropertyChangedAsync(e.Value?.ToString() ?? evaluatedSelected.Fill)" />
+                        <input type="text" class="ms-input" readonly value="@($"{Math.Round(evaluatedSelected.Opacity * 100)}%")" />
+                    </div>
+                </div>
+
+                <!-- Stroke -->
+                <div class="ms-insp-section">
+                    <div class="ms-insp-header">
+                        <span>Stroke</span>
+                        <span style="width:32px;height:18px;border-radius:9px;background:var(--ms-accent);display:inline-flex;align-items:center;justify-content:flex-end;padding:2px;">
+                            <span style="width:14px;height:14px;border-radius:50%;background:#FFFFFF;"></span>
+                        </span>
+                    </div>
+                    <div class="ms-color-row">
+                        <span class="ms-color-swatch" style="background:#FFFFFF;display:inline-block;"></span>
+                        <input type="text" class="ms-input" readonly value="#FFFFFF" />
+                        <input type="text" class="ms-input" readonly value="2 px" />
+                    </div>
+                    @if (selected.Kind == LayerKind.Text)
+                    {
+                        <input type="text" class="ms-input" data-testid="input-text-content" disabled="@selected.Locked"
+                               value="@selected.TextContent"
+                               @onchange="(e) => OnTextChangedAsync(e.Value?.ToString() ?? string.Empty, selected.FontSize ?? 36)" />
+                    }
+                </div>
+
+                <!-- Opacity -->
+                <div class="ms-insp-section">
+                    <div class="ms-insp-header">
+                        <span>Opacity</span>
+                        <button type="button" class="ms-icon-action" disabled="@selected.Locked" title="Add Opacity Keyframe" @onclick="() => AddKeyframeAtCurrentFrameAsync(selected.Id, AnimatableProperty.Opacity, evaluatedSelected.Opacity)">
+                            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24"><polygon points="12 3 21 12 12 21 3 12" /></svg>
+                        </button>
+                    </div>
+                    <div class="ms-opacity-row">
+                        <input type="range" min="0" max="100" step="1" class="ms-range-accent" disabled="@selected.Locked"
+                               value="@((int)Math.Round(evaluatedSelected.Opacity * 100))"
+                               @onchange="(e) => OnOpacityPercentChangedAsync(e.Value?.ToString(), evaluatedSelected.Opacity)" />
+                        <input type="text" class="ms-input" readonly value="@($"{(int)Math.Round(evaluatedSelected.Opacity * 100)}%")" />
+                    </div>
+                </div>
+
+                @if (InspectorMode == "animate")
+                {
+                    <!-- Easing -->
+                    <div class="ms-insp-section">
+                        <div class="ms-insp-header"><span>Easing</span></div>
+                        <select class="ms-select" data-testid="select-easing" @bind="SelectedEasingWire">
+                            <option value="cubic-bezier">Cubic Bezier (0.4, 0.0, 0.2, 1.0)</option>
+                            <option value="ease-in-out">Ease In Out</option>
+                            <option value="ease-out">Ease Out</option>
+                            <option value="ease-in">Ease In</option>
+                            <option value="linear">Linear</option>
+                            <option value="step">Step (Hold)</option>
+                        </select>
+                    </div>
+
+                    <!-- Keyframes Summary -->
+                    <div class="ms-insp-section" style="border-bottom:none;">
+                        <div class="ms-insp-header">
+                            <span>Keyframes</span>
+                            <div style="display:flex;gap:4px;">
+                                <button type="button" class="ms-icon-action" data-testid="btn-key-x" disabled="@selected.Locked" title="Insert Transform Keyframe at Playhead"
+                                        @onclick="() => AddKeyframeAtCurrentFrameAsync(selected.Id, AnimatableProperty.TransformX, evaluatedSelected.X)">
+                                    <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                                        <line x1="12" y1="5" x2="12" y2="19" />
+                                        <line x1="5" y1="12" x2="19" y2="12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </div>
+
+                        @{
+                            int posCount = GetKeyframeCount(selected.Id, AnimatableProperty.TransformX) + GetKeyframeCount(selected.Id, AnimatableProperty.TransformY);
+                            int scaleCount = GetKeyframeCount(selected.Id, AnimatableProperty.TransformScaleX) + GetKeyframeCount(selected.Id, AnimatableProperty.TransformScaleY);
+                            int rotCount = GetKeyframeCount(selected.Id, AnimatableProperty.TransformRotation);
+                            int opCount = GetKeyframeCount(selected.Id, AnimatableProperty.Opacity);
+                        }
+
+                        <div class="ms-kf-summary-row">
+                            <div class="ms-kf-summary-left">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="color:var(--ms-accent);"><polygon points="12 4 20 12 12 20 4 12" /></svg>
+                                <span>Position</span>
+                            </div>
+                            <span class="ms-kf-summary-count">@posCount keyframes</span>
+                        </div>
+                        <div class="ms-kf-summary-row">
+                            <div class="ms-kf-summary-left">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="color:var(--ms-accent);"><polygon points="12 4 20 12 12 20 4 12" /></svg>
+                                <span>Scale</span>
+                            </div>
+                            <span class="ms-kf-summary-count">@scaleCount keyframes</span>
+                        </div>
+                        <div class="ms-kf-summary-row">
+                            <div class="ms-kf-summary-left">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="color:var(--ms-accent);"><polygon points="12 4 20 12 12 20 4 12" /></svg>
+                                <span>Rotation</span>
+                            </div>
+                            <span class="ms-kf-summary-count">@rotCount keyframes</span>
+                        </div>
+                        <div class="ms-kf-summary-row">
+                            <div class="ms-kf-summary-left">
+                                <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24" style="color:var(--ms-accent);"><polygon points="12 4 20 12 12 20 4 12" /></svg>
+                                <span>Opacity</span>
+                            </div>
+                            <span class="ms-kf-summary-count">@opCount keyframes</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <!-- Design Mode Quick Alignment & Layer Order -->
+                    <div class="ms-insp-section" style="border-bottom:none;">
+                        <div class="ms-insp-header"><span>Arrange &amp; Grouping</span></div>
+                        <div class="ms-xy-grid">
+                            <button type="button" class="ms-btn ms-btn-sm" @onclick="() => MoveLayerOrderAsync(selected.Id, 1)">Bring Forward</button>
+                            <button type="button" class="ms-btn ms-btn-sm" @onclick="() => MoveLayerOrderAsync(selected.Id, -1)">Send Backward</button>
+                            <button type="button" class="ms-btn ms-btn-sm" @onclick="GroupSelectedAsync">Group Selected</button>
+                            <button type="button" class="ms-btn ms-btn-sm" @onclick="() => ApplyPresetAsync(selected.Id, MotionPresetKind.PopScale)">Pop Preset</button>
+                        </div>
+                    </div>
+                }
+            }
+        </aside>
+    </div>
+
+    <!-- 5. Bottom Status Bar (28px) -->
+    <footer class="ms-status-bar" data-testid="workbench-statusbar">
+        <div class="ms-status-items">
+            <svg class="ms-svg-icon ms-svg-icon-sm" viewBox="0 0 24 24">
+                <circle cx="12" cy="12" r="9" />
+                <line x1="12" y1="16" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12.01" y2="8" />
+            </svg>
+            <span>Ready</span>
+            <span>·</span>
+            <span>@Workspace.CurrentDocument.Composition.Fps FPS</span>
+            <span>·</span>
+            <span>@Workspace.CurrentDocument.Composition.Width × @Workspace.CurrentDocument.Composition.Height</span>
+            <span>·</span>
+            <span>@(Workspace.IsDirty ? "Modified" : "Saved")</span>
+        </div>
+        <div class="ms-status-items">
+            @if (LastSkiaMetrics is not null)
+            {
+                <span>SkiaSharp @(LastSkiaMetrics.NodeCount)-node: @(LastSkiaMetrics.RenderMs.ToString("F1", CultureInfo.InvariantCulture))ms</span>
+                <span>·</span>
+            }
+            <span>Frame @Workspace.CurrentFrameIndex / @Workspace.CurrentDocument.Composition.DurationFrames</span>
+        </div>
+    </footer>
+
+    <!-- New Project / Composition Modal -->
+    @if (ShowNewProjectModal)
+    {
+        <div class="ms-modal-backdrop" data-testid="modal-new-project">
+            <div class="ms-modal-card">
+                <h3>Project &amp; Composition Settings</h3>
+                <div>
+                    <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Project Name</label>
+                    <input type="text" class="ms-input" @bind="NewProjectName" />
+                </div>
+                <div class="ms-xy-grid">
+                    <div>
+                        <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Width (px)</label>
+                        <input type="number" class="ms-input" @bind="NewProjectWidth" />
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Height (px)</label>
+                        <input type="number" class="ms-input" @bind="NewProjectHeight" />
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Frame Rate</label>
+                        <select class="ms-select" @bind="NewProjectFps">
+                            <option value="24">24 FPS</option>
+                            <option value="30">30 FPS</option>
+                            <option value="60">60 FPS</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Duration (Frames)</label>
+                        <input type="number" class="ms-input" @bind="NewProjectDurationFrames" />
+                    </div>
+                </div>
+                <div class="ms-modal-actions">
+                    <button type="button" class="ms-btn" @onclick="ToggleNewProjectModal">Cancel</button>
+                    <button type="button" class="ms-btn ms-btn-primary" @onclick="ConfirmCreateProjectAsync">Create New Project</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Open / Save Project Modal -->
+    @if (ShowFileModal)
+    {
+        <div class="ms-modal-backdrop" data-testid="modal-file">
+            <div class="ms-modal-card">
+                <h3>Project Files (.motion.json Schema v1)</h3>
+                <div>
+                    <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">File Name</label>
+                    <input type="text" class="ms-input" @bind="TargetFileName" />
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                    @foreach (string file in Repository.ListProjectFiles())
+                    {
+                        <button type="button" class="ms-btn ms-btn-sm" @onclick="() => TargetFileName = file">@file</button>
+                    }
+                </div>
+                <div class="ms-modal-actions">
+                    <button type="button" class="ms-btn" @onclick="ToggleFileModal">Close</button>
+                    <button type="button" class="ms-btn" @onclick="OpenFromFileModalAsync">Open</button>
+                    <button type="button" class="ms-btn ms-btn-primary" @onclick="SaveFromFileModalAsync">Save Project</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Safe SVG Import Modal -->
+    @if (ShowSvgModal)
+    {
+        <div class="ms-modal-backdrop" data-testid="modal-svg">
+            <div class="ms-modal-card">
+                <h3>Import Sanitized Vector SVG</h3>
+                <div>
+                    <label style="display:block;margin-bottom:4px;color:var(--ms-muted);">Layer Name</label>
+                    <input type="text" class="ms-input" @bind="SvgImportName" />
+                </div>
+                <textarea class="ms-textarea" rows="5" @bind="SvgBuffer"></textarea>
+                <div class="ms-modal-actions">
+                    <button type="button" class="ms-btn" @onclick="ToggleSvgModal">Cancel</button>
+                    <button type="button" class="ms-btn ms-btn-primary" @onclick="ConfirmSvgImportAsync">Sanitize &amp; Import</button>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Export Modal (SkiaSharp PNG + Clean SVG) -->
+    @if (ShowExportModal)
+    {
+        <div class="ms-modal-backdrop" data-testid="modal-export">
+            <div class="ms-modal-card">
+                <h3>Export Frame @Workspace.CurrentFrameIndex</h3>
+                <div style="display:flex;gap:8px;">
+                    <a class="ms-btn ms-btn-primary" style="text-decoration:none;" href="/api/export/png?frame=@Workspace.CurrentFrameIndex" target="_blank">Download SkiaSharp PNG (@LastExportPngBytes.ToString("N0", CultureInfo.InvariantCulture) B)</a>
+                    <button type="button" class="ms-btn" @onclick="RefreshExportPreview">Refresh SVG</button>
+                </div>
+                <textarea class="ms-textarea" rows="6" readonly value="@ExportSvgPreview"></textarea>
+                <div class="ms-modal-actions">
+                    <button type="button" class="ms-btn" @onclick="() => ShowExportModal = false">Done</button>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private DotNetObjectReference<Workbench>? _dotNetRef;
+    private bool _rendererInitialized;
+
+    private int LeftPanelWidth { get; set; } = EditorWorkspaceService.DefaultLeftPanelWidth;
+    private int InspectorWidth { get; set; } = EditorWorkspaceService.DefaultInspectorWidth;
+    private int TimelineHeight { get; set; } = EditorWorkspaceService.DefaultTimelineHeight;
+
+    private bool IsDarkTheme { get; set; }
+    private string ActiveTool { get; set; } = "select";
+    private string LeftSidebarTab { get; set; } = "layers";
+    private string InspectorMode { get; set; } = "animate";
+    private string TimelineTab { get; set; } = "timeline";
+
+    private bool ShowLayerSearch { get; set; }
+    private string LayerFilterText { get; set; } = string.Empty;
+
+    private bool ShowNewProjectModal { get; set; }
+    private string NewProjectName { get; set; } = "Brand Intro / Scene 02";
+    private int NewProjectWidth { get; set; } = 1920;
+    private int NewProjectHeight { get; set; } = 1080;
+    private int NewProjectFps { get; set; } = 60;
+    private int NewProjectDurationFrames { get; set; } = 240;
+
+    private bool ShowFileModal { get; set; }
+    private string TargetFileName { get; set; } = "basic-project.motion.json";
+
+    private bool ShowSvgModal { get; set; }
+    private string SvgImportName { get; set; } = "Vector Shape";
+    private string SvgBuffer { get; set; } = "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"240\" height=\"140\"><rect width=\"240\" height=\"140\" fill=\"#5148EC\" /></svg>";
+
+    private bool ShowExportModal { get; set; }
+    private string ExportSvgPreview { get; set; } = string.Empty;
+    private int LastExportPngBytes { get; set; }
+    private SkiaRenderMetrics? LastSkiaMetrics { get; set; }
+
+    private string SelectedEasingWire { get; set; } = "cubic-bezier";
+    private double BezierX1 { get; set; } = 0.40;
+    private double BezierY1 { get; set; }
+    private double BezierX2 { get; set; } = 0.20;
+    private double BezierY2 { get; set; } = 1.00;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotNetRef = DotNetObjectReference.Create(this);
+            try
+            {
+                await JS.InvokeVoidAsync("MotionStudioRenderer.init", "motion-canvas-host", _dotNetRef, Workspace.GetSnapshot());
+                _rendererInitialized = true;
+            }
+            catch (JSException)
+            {
+                // Renderer script initializes inside browser/Electron runtime.
+            }
+        }
+    }
+
+    private async Task SyncRendererAsync()
+    {
+        if (!_rendererInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            await JS.InvokeVoidAsync("MotionStudioRenderer.loadSnapshot", Workspace.GetSnapshot());
+        }
+        catch (JSException)
+        {
+        }
+    }
+
+    [JSInvokable]
+    public async Task<CommandResult> OnRendererPointerCommitAsync(PointerCommitPayload payload)
+    {
+        CommandResult result = Workspace.CommitPointerTransform(payload);
+        await InvokeAsync(StateHasChanged);
+        await SyncRendererAsync();
+        return result;
+    }
+
+    [JSInvokable]
+    public async Task OnRendererLayerSelectedAsync(string layerId, bool appendSelection)
+    {
+        Workspace.SelectLayer(layerId, appendSelection);
+        await InvokeAsync(StateHasChanged);
+        await SyncRendererAsync();
+    }
+
+    [JSInvokable]
+    public async Task OnRendererPlaybackFrameSyncAsync(int frameIndex, bool isPlaying)
+    {
+        Workspace.SeekFrame(frameIndex);
+        Workspace.SetPlaybackState(isPlaying);
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SetActiveTool(string tool)
+    {
+        ActiveTool = tool;
+    }
+
+    private void ToggleDarkTheme()
+    {
+        IsDarkTheme = !IsDarkTheme;
+    }
+
+    private void ToggleSearchBox()
+    {
+        ShowLayerSearch = !ShowLayerSearch;
+    }
+
+    private void ToggleGraphTab()
+    {
+        TimelineTab = TimelineTab == "graph" ? "timeline" : "graph";
+    }
+
+    private IEnumerable<LayerNode> GetFilteredLayers()
+    {
+        IEnumerable<LayerNode> ordered = Workspace.CurrentDocument.Layers.OrderBy(l => GetConceptDisplayOrder(l));
+        if (string.IsNullOrWhiteSpace(LayerFilterText))
+        {
+            return ordered;
+        }
+
+        return ordered.Where(l => l.Name.Contains(LayerFilterText.Trim(), StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static int GetConceptDisplayOrder(LayerNode layer)
+    {
+        return layer.Id switch
+        {
+            "layer-bg" => 0,
+            "layer-grid" => 1,
+            "layer-orbital-ring" => 2,
+            "layer-headline" => 3,
+            "layer-subtitle" => 4,
+            "layer-accent-shapes" => 5,
+            _ => 100 - layer.ZIndex,
+        };
+    }
+
+    private RenderFragment RenderLayerKindIcon(LayerNode layer) => builder =>
+    {
+        builder.OpenElement(0, "svg");
+        builder.AddAttribute(1, "class", "ms-svg-icon ms-svg-icon-sm");
+        builder.AddAttribute(2, "viewBox", "0 0 24 24");
+
+        if (layer.Locked && (layer.Id == "layer-bg" || layer.Id == "layer-grid"))
+        {
+            builder.OpenElement(3, "path");
+            builder.AddAttribute(4, "d", "M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7z");
+            builder.CloseElement();
+        }
+        else if (layer.Kind == LayerKind.Ellipse)
+        {
+            builder.OpenElement(3, "circle");
+            builder.AddAttribute(4, "cx", "12");
+            builder.AddAttribute(5, "cy", "12");
+            builder.AddAttribute(6, "r", "8");
+            builder.CloseElement();
+        }
+        else if (layer.Kind == LayerKind.Text)
+        {
+            builder.OpenElement(3, "polyline");
+            builder.AddAttribute(4, "points", "5 7 5 4 19 4 19 7");
+            builder.CloseElement();
+            builder.OpenElement(5, "line");
+            builder.AddAttribute(6, "x1", "12");
+            builder.AddAttribute(7, "y1", "4");
+            builder.AddAttribute(8, "x2", "12");
+            builder.AddAttribute(9, "y2", "20");
+            builder.CloseElement();
+        }
+        else
+        {
+            builder.OpenElement(3, "rect");
+            builder.AddAttribute(4, "x", "4");
+            builder.AddAttribute(5, "y", "5");
+            builder.AddAttribute(6, "width", "16");
+            builder.AddAttribute(7, "height", "14");
+            builder.AddAttribute(8, "rx", "2");
+            builder.CloseElement();
+        }
+
+        builder.CloseElement();
+    };
+
+    private async Task AddShapeAsync(LayerKind kind)
+    {
+        Workspace.CreateLayer(kind);
+        LeftSidebarTab = "layers";
+        await SyncRendererAsync();
+    }
+
+    private async Task DeleteSelectedAsync()
+    {
+        Workspace.DeleteSelectedLayers();
+        await SyncRendererAsync();
+    }
+
+    private async Task SelectLayerAsync(string layerId, bool multiSelect)
+    {
+        Workspace.SelectLayer(layerId, multiSelect);
+        await SyncRendererAsync();
+    }
+
+    private async Task ToggleVisibilityAsync(string layerId)
+    {
+        Workspace.ToggleLayerVisibility(layerId);
+        await SyncRendererAsync();
+    }
+
+    private async Task ToggleLockAsync(string layerId)
+    {
+        Workspace.ToggleLayerLock(layerId);
+        await SyncRendererAsync();
+    }
+
+    private async Task MoveLayerOrderAsync(string layerId, int delta)
+    {
+        Workspace.MoveLayerOrder(layerId, delta);
+        await SyncRendererAsync();
+    }
+
+    private async Task GroupSelectedAsync()
+    {
+        Workspace.GroupSelectedLayers();
+        await SyncRendererAsync();
+    }
+
+    private async Task RenameLayerAsync(string layerId, string newName)
+    {
+        Workspace.RenameLayer(layerId, newName);
+        await SyncRendererAsync();
+    }
+
+    private void CopySelected()
+    {
+        Workspace.CopySelectedLayers();
+    }
+
+    private async Task PasteClipboardAsync()
+    {
+        Workspace.PasteClipboardLayers();
+        await SyncRendererAsync();
+    }
+
+    private async Task UndoAsync()
+    {
+        Workspace.Undo();
+        await SyncRendererAsync();
+    }
+
+    private async Task RedoAsync()
+    {
+        Workspace.Redo();
+        await SyncRendererAsync();
+    }
+
+    private async Task AdjustZoomAsync(double delta)
+    {
+        Workspace.SetViewportZoom(Math.Round(Workspace.CanvasZoom + delta, 2));
+        await SyncRendererAsync();
+    }
+
+    private async Task ResetZoomAsync()
+    {
+        Workspace.SetViewportZoom(0.75, 0, 0);
+        await SyncRendererAsync();
+    }
+
+    private async Task ToggleGridAsync()
+    {
+        Workspace.ToggleGrid();
+        await SyncRendererAsync();
+    }
+
+    private async Task OnNumericPropertyChangedAsync(AnimatableProperty property, string? rawVal, double fallback)
+    {
+        if (!double.TryParse(rawVal, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+        {
+            parsed = fallback;
+        }
+
+        Workspace.SetSelectedProperty(property, parsed);
+        await SyncRendererAsync();
+    }
+
+    private async Task OnScaleUniformChangedAsync(string? rawVal, double fallback)
+    {
+        if (!double.TryParse(rawVal, NumberStyles.Float, CultureInfo.InvariantCulture, out double parsed))
+        {
+            parsed = fallback;
+        }
+
+        Workspace.SetSelectedProperty(AnimatableProperty.TransformScaleX, parsed);
+        Workspace.SetSelectedProperty(AnimatableProperty.TransformScaleY, parsed);
+        await SyncRendererAsync();
+    }
+
+    private async Task OnOpacityPercentChangedAsync(string? rawPct, double fallback)
+    {
+        if (!double.TryParse(rawPct, NumberStyles.Float, CultureInfo.InvariantCulture, out double pct))
+        {
+            pct = fallback * 100.0;
+        }
+
+        Workspace.SetSelectedProperty(AnimatableProperty.Opacity, Math.Clamp(pct / 100.0, 0.0, 1.0));
+        await SyncRendererAsync();
+    }
+
+    private async Task OnColorPropertyChangedAsync(string rawHex)
+    {
+        Workspace.SetSelectedProperty(AnimatableProperty.Fill, 0.0, rawHex);
+        await SyncRendererAsync();
+    }
+
+    private async Task OnGeometryChangedAsync(string? rawW, string? rawH, ShapeGeometry current)
+    {
+        double w = current.Width;
+        double h = current.Height;
+        if (rawW is not null && double.TryParse(rawW, NumberStyles.Float, CultureInfo.InvariantCulture, out double pw))
+        {
+            w = pw;
+        }
+
+        if (rawH is not null && double.TryParse(rawH, NumberStyles.Float, CultureInfo.InvariantCulture, out double ph))
+        {
+            h = ph;
+        }
+
+        Workspace.SetSelectedGeometry(w, h);
+        await SyncRendererAsync();
+    }
+
+    private async Task OnTextChangedAsync(string text, double fontSize)
+    {
+        Workspace.SetSelectedText(text, fontSize);
+        await SyncRendererAsync();
+    }
+
+    private async Task AddKeyframeAtCurrentFrameAsync(string layerId, AnimatableProperty property, double value)
+    {
+        EasingType easing = DomainGuard.ParseEasingType(SelectedEasingWire);
+        CubicBezierPoints? bezier = easing == EasingType.CubicBezier
+            ? new CubicBezierPoints(BezierX1, BezierY1, BezierX2, BezierY2)
+            : null;
+
+        Workspace.UpsertKeyframe(layerId, property, Workspace.CurrentFrameIndex, value, easing, null, bezier);
+        await SyncRendererAsync();
+    }
+
+    private async Task AddColorKeyframeAtCurrentFrameAsync(string layerId, string hexColor)
+    {
+        EasingType easing = DomainGuard.ParseEasingType(SelectedEasingWire);
+        Workspace.UpsertKeyframe(layerId, AnimatableProperty.Fill, Workspace.CurrentFrameIndex, 0.0, easing, hexColor);
+        await SyncRendererAsync();
+    }
+
+    private async Task DeleteKeyframeAsync(string trackId, int frameIndex)
+    {
+        Workspace.DeleteKeyframe(trackId, frameIndex);
+        await SyncRendererAsync();
+    }
+
+    private async Task ApplyPresetAsync(string layerId, MotionPresetKind preset)
+    {
+        Workspace.ApplyPreset(layerId, preset);
+        await SyncRendererAsync();
+    }
+
+    private async Task ApplySelectedPresetAsync(MotionPresetKind preset)
+    {
+        LayerNode? target = Workspace.GetPrimarySelectedLayer();
+        if (target is not null)
+        {
+            await ApplyPresetAsync(target.Id, preset);
+        }
+    }
+
+    private async Task SeekFrameAsync(int frameIndex)
+    {
+        Workspace.SeekFrame(frameIndex);
+        await SyncRendererAsync();
+    }
+
+    private async Task OnFrameSliderChangedAsync(string? rawFrame)
+    {
+        if (int.TryParse(rawFrame, NumberStyles.Integer, CultureInfo.InvariantCulture, out int frame))
+        {
+            await SeekFrameAsync(frame);
+        }
+    }
+
+    private async Task PreviewFromStartAsync()
+    {
+        Workspace.SeekFrame(0);
+        await SyncRendererAsync();
+        if (!Workspace.IsPlaying)
+        {
+            await TogglePlayAsync();
+        }
+    }
+
+    private async Task TogglePlayAsync()
+    {
+        bool nextPlay = !Workspace.IsPlaying;
+        Workspace.SetPlaybackState(nextPlay);
+        if (_rendererInitialized)
+        {
+            try
+            {
+                if (nextPlay)
+                {
+                    await JS.InvokeVoidAsync(
+                        "MotionStudioRenderer.startPlayback",
+                        Workspace.CurrentFrameIndex,
+                        Workspace.CurrentDocument.Composition.Fps,
+                        Workspace.CurrentDocument.Composition.DurationFrames,
+                        Workspace.IsLooping);
+                }
+                else
+                {
+                    await JS.InvokeVoidAsync("MotionStudioRenderer.pausePlayback");
+                }
+            }
+            catch (JSException)
+            {
+            }
+        }
+    }
+
+    private void ToggleNewProjectModal()
+    {
+        ShowNewProjectModal = !ShowNewProjectModal;
+    }
+
+    private async Task ConfirmCreateProjectAsync()
+    {
+        CommandResult res = Workspace.CreateNewProject(NewProjectName, NewProjectWidth, NewProjectHeight, NewProjectFps, NewProjectDurationFrames);
+        if (res.Succeeded)
+        {
+            ShowNewProjectModal = false;
+            await SyncRendererAsync();
+        }
+    }
+
+    private void ToggleFileModal()
+    {
+        TargetFileName = Workspace.LastSavedFileName;
+        ShowFileModal = !ShowFileModal;
+    }
+
+    private async Task QuickSaveAsync()
+    {
+        await Workspace.SaveProjectAsync(Workspace.LastSavedFileName);
+    }
+
+    private async Task SaveFromFileModalAsync()
+    {
+        CommandResult res = await Workspace.SaveProjectAsync(TargetFileName);
+        if (res.Succeeded)
+        {
+            ShowFileModal = false;
+        }
+    }
+
+    private async Task OpenFromFileModalAsync()
+    {
+        CommandResult res = await Workspace.OpenProjectAsync(TargetFileName);
+        if (res.Succeeded)
+        {
+            ShowFileModal = false;
+            await SyncRendererAsync();
+        }
+    }
+
+    private void ToggleSvgModal()
+    {
+        ShowSvgModal = !ShowSvgModal;
+    }
+
+    private async Task ConfirmSvgImportAsync()
+    {
+        CommandResult res = Workspace.ImportSvgAsset(SvgImportName, SvgBuffer);
+        if (res.Succeeded)
+        {
+            ShowSvgModal = false;
+            await SyncRendererAsync();
+        }
+    }
+
+    private Task OpenExportModalAsync()
+    {
+        RefreshExportPreview();
+        ShowExportModal = true;
+        return Task.CompletedTask;
+    }
+
+    private void RefreshExportPreview()
+    {
+        ExportSvgPreview = Workspace.ExportCurrentFrameSvg();
+        byte[] png = Workspace.ExportCurrentFramePngBytes();
+        LastExportPngBytes = png.Length;
+    }
+
+    private Task RunSkiaBenchmarkAsync()
+    {
+        LastSkiaMetrics = Workspace.RunSkiaBenchmark(100);
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadDemoAsync()
+    {
+        Workspace.LoadDemoProject();
+        await SyncRendererAsync();
+    }
+
+    private async Task HandleGlobalKeyDown(KeyboardEventArgs e)
+    {
+        if (ShowNewProjectModal || ShowFileModal || ShowSvgModal || ShowExportModal)
+        {
+            return;
+        }
+
+        if (e.CtrlKey && string.Equals(e.Key, "z", StringComparison.OrdinalIgnoreCase))
+        {
+            await UndoAsync();
+        }
+        else if (e.CtrlKey && string.Equals(e.Key, "y", StringComparison.OrdinalIgnoreCase))
+        {
+            await RedoAsync();
+        }
+        else if (e.CtrlKey && string.Equals(e.Key, "s", StringComparison.OrdinalIgnoreCase))
+        {
+            await QuickSaveAsync();
+        }
+    }
+
+    private int GetKeyframeCount(string layerId, AnimatableProperty property)
+    {
+        AnimationTrack? track = Workspace.CurrentDocument.Tracks.FirstOrDefault(t =>
+            string.Equals(t.LayerId, layerId, StringComparison.Ordinal) && t.Property == property);
+        return track?.Keyframes.Count ?? 0;
+    }
+
+    private static string GetFriendlyPropertyLabel(AnimatableProperty property)
+    {
+        return property switch
+        {
+            AnimatableProperty.TransformX => "Position",
+            AnimatableProperty.TransformY => "Position Y",
+            AnimatableProperty.TransformScaleX => "Scale",
+            AnimatableProperty.TransformScaleY => "Scale Y",
+            AnimatableProperty.TransformRotation => "Rotation",
+            AnimatableProperty.Opacity => "Opacity",
+            AnimatableProperty.Fill => "Fill",
+            _ => property.ToWireName(),
+        };
+    }
+
+    private string BuildEasingSvgPath()
+    {
+        EasingType easing = DomainGuard.ParseEasingType(SelectedEasingWire);
+        var bezier = new CubicBezierPoints(
+            Math.Clamp(BezierX1, 0.0, 1.0),
+            BezierY1,
+            Math.Clamp(BezierX2, 0.0, 1.0),
+            BezierY2);
+
+        var sb = new System.Text.StringBuilder("M 10 90");
+        for (int i = 1; i <= 20; i++)
+        {
+            double t = i / 20.0;
+            double v = TimelineEvaluator.EvaluateEasing(easing, t, bezier);
+            double px = 10.0 + (t * 100.0);
+            double py = 90.0 - (v * 80.0);
+            sb.AppendFormat(CultureInfo.InvariantCulture, " L {0:F1} {1:F1}", px, py);
+        }
+
+        return sb.ToString();
+    }
+
+    private string GetInitialSnapshotJson()
+    {
+        return System.Text.Json.JsonSerializer.Serialize(
+            Workspace.GetSnapshot(),
+            new System.Text.Json.JsonSerializerOptions(System.Text.Json.JsonSerializerDefaults.Web));
+    }
+
+    private double GetFramePercentage(int frameIndex)
+    {
+        int duration = Math.Max(1, Workspace.CurrentDocument.Composition.DurationFrames);
+        return Math.Clamp((double)frameIndex / duration * 100.0, 0.0, 100.0);
+    }
+
+    private static string FormatTimecode(int frameIndex, int fps)
+    {
+        int safeFps = Math.Max(1, fps);
+        int totalSeconds = frameIndex / safeFps;
+        int remFrames = frameIndex % safeFps;
+        int minutes = totalSeconds / 60;
+        int seconds = totalSeconds % 60;
+        return string.Create(CultureInfo.InvariantCulture, $"{minutes:D2}:{seconds:D2}:{remFrames:D2}");
+    }
+
+    private static string FormatRulerLabel(int frameIndex, int fps)
+    {
+        double sec = (double)frameIndex / Math.Max(1, fps);
+        if (Math.Abs(sec - Math.Round(sec)) < 0.01)
+        {
+            return string.Create(CultureInfo.InvariantCulture, $"{(int)Math.Round(sec)}s");
+        }
+
+        return string.Create(CultureInfo.InvariantCulture, $"{sec:F1}s");
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_rendererInitialized)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("MotionStudioRenderer.dispose");
+            }
+            catch (JSDisconnectedException)
+            {
+            }
+            catch (JSException)
+            {
+            }
+        }
+
+        _dotNetRef?.Dispose();
+    }
+}
