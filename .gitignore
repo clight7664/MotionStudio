@@ -29,6 +29,7 @@ Thumbs.db
 *.log
 *.tmp
 *.bak
+examples/selftest-roundtrip.motion.json
 
 # Secrets and local configuration
 .env

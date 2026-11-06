@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MotionStudio.Desktop</RootNamespace>
+    <AssemblyName>MotionStudio.Desktop</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\MotionStudio.Application\MotionStudio.Application.csproj" />
+  </ItemGroup>
+</Project>

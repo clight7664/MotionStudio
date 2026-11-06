@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <IsPackable>false</IsPackable>
+    <IsTestProject>true</IsTestProject>
+    <NoWarn>$(NoWarn);CA1707</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.NET.Test.Sdk" />
+    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.runner.visualstudio" />
+  </ItemGroup>
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\MotionStudio.Infrastructure\MotionStudio.Infrastructure.csproj" />
+    <ProjectReference Include="..\..\src\MotionStudio.Application\MotionStudio.Application.csproj" />
+    <ProjectReference Include="..\..\src\MotionStudio.Domain\MotionStudio.Domain.csproj" />
+    <ProjectReference Include="..\..\src\MotionStudio.Desktop\MotionStudio.Desktop.csproj" />
+  </ItemGroup>
+</Project>

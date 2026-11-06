@@ -1,0 +1,15 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MotionStudio.Domain/MotionStudio.Domain.csproj" />
+    <Project Path="src/MotionStudio.Application/MotionStudio.Application.csproj" />
+    <Project Path="src/MotionStudio.Infrastructure/MotionStudio.Infrastructure.csproj" />
+    <Project Path="src/MotionStudio.Desktop/MotionStudio.Desktop.csproj" />
+    <Project Path="src/MotionStudio.Web/MotionStudio.Web.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MotionStudio.Domain.Tests/MotionStudio.Domain.Tests.csproj" />
+    <Project Path="tests/MotionStudio.Application.Tests/MotionStudio.Application.Tests.csproj" />
+    <Project Path="tests/MotionStudio.Integration.Tests/MotionStudio.Integration.Tests.csproj" />
+    <Project Path="tests/MotionStudio.E2E/MotionStudio.E2E.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,19 @@
+{
+  "name": "@motionstudio/renderer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "MotionStudio Native HTML5 Canvas 2D Scene Bridge & Timeline Interpolation Engine",
+  "scripts": {
+    "typecheck": "node ./node_modules/typescript/bin/tsc --noEmit",
+    "lint": "node ./scripts/lint-check.mjs",
+    "compile": "node ./node_modules/typescript/bin/tsc",
+    "build": "node ./node_modules/typescript/bin/tsc && node ./scripts/build-bundle.mjs",
+    "test": "node ./node_modules/typescript/bin/tsc && node --test ./dist/tests/renderer.test.js"
+  },
+  "devDependencies": {
+    "@types/node": "^22.19.19",
+    "eslint": "^9.39.4",
+    "typescript": "^5.9.3"
+  }
+}

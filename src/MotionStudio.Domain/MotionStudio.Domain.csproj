@@ -1,0 +1,6 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>MotionStudio.Domain</RootNamespace>
+    <AssemblyName>MotionStudio.Domain</AssemblyName>
+  </PropertyGroup>
+</Project>
